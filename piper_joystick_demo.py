@@ -5,7 +5,7 @@ from digitalio import DigitalInOut, Direction, Pull
 from adafruit_hid.mouse import Mouse
 import usb_hid
 from adafruit_debouncer import Debouncer
-from piper_joystick import PiperJoystickAxis
+from piper_command_center import PiperJoystickAxis
 
 # Setup DPAD
 #
