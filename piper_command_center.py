@@ -44,6 +44,17 @@
 # while True:
 #	  pcc.process()
 #
+# Note that this also uses exec() to provide minimal REPL functionality. So you
+# can paste code such as the following:
+#
+# led = DigitalInOut(board.D13)
+# led.direction = Direction.OUTPUT
+# led.value = True
+#
+# Note that it assumes that the code will be entered quickly, and uses
+# input() to obtain a line of code. This is blocking, but isn't called until
+# there is input available.
+#
 ################################################################################
 
 from adafruit_debouncer import Debouncer
@@ -52,6 +63,7 @@ from analogio import AnalogIn
 import board
 from digitalio import DigitalInOut, Direction, Pull
 from math import copysign
+import supervisor
 import usb_hid
 
 ################################################################################
@@ -65,7 +77,7 @@ class PiperJoystickAxis:
 		self.outputScale = outputScale
 		self.deadbandCutoff = deadbandCutoff
 		self.weight = weight
-		self.alpha = self._Cubic(self.deadbandCutoff) 
+		self.alpha = self._Cubic(self.deadbandCutoff)
 
 	# Cubic function to map input to output in such a way as to give more precision
 	# for lower values
@@ -116,7 +128,17 @@ class PiperCommandCenter:
 		self.right = Debouncer(self.right_pin)
 		self.mouse = Mouse(usb_hid.devices)
 
+	def process_repl_cmds(self):
+		# Assume that the command will be pasted, because input()
+		# will block until end of line
+		#
+		if supervisor.runtime.serial_bytes_available:
+			cmd = input()
+			exec(cmd)
+
 	def process(self):
+		self.process_repl_cmds()
+
 		# Call the debouncing library frequently
 		self.left.update()
 		self.right.update()
