@@ -66,6 +66,9 @@ from math import copysign
 import supervisor
 import usb_hid
 
+__version__ = "0.5.0"
+__repo__ = "https://github.com/derhexenmeister/CommandCenter.git"
+
 ################################################################################
 # This function allows a user to manage joystick handling themselves.
 # See http://www.mimirgames.com/articles/games/joystick-input-and-using-deadbands/
@@ -156,3 +159,4 @@ class PiperCommandCenter:
 			self.mouse.press(Mouse.RIGHT_BUTTON)
 		elif self.right.rose:
 			self.mouse.release(Mouse.RIGHT_BUTTON)
+
