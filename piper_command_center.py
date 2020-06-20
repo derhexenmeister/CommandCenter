@@ -58,15 +58,17 @@
 ################################################################################
 
 from adafruit_debouncer import Debouncer
+import adafruit_dotstar
 from adafruit_hid.mouse import Mouse
 from analogio import AnalogIn
 import board
 from digitalio import DigitalInOut, Direction, Pull
 from math import copysign
 import supervisor
+import time
 import usb_hid
 
-__version__ = "0.5.0"
+__version__ = "0.5.1"
 __repo__ = "https://github.com/derhexenmeister/CommandCenter.git"
 
 ################################################################################
@@ -108,6 +110,13 @@ class PiperJoystickAxis:
 ################################################################################
 # Handle all Piper Command Center built-in functionality
 #
+
+# States
+#
+_UNWIRED  = 0
+_WAITING  = 1
+_JOYSTICK = 2
+
 class PiperCommandCenter:
 	def __init__(self, joy_x_pin=board.A4, joy_y_pin=board.A3, joy_gnd_pin=board.A5, dpad_l_pin=board.D3, dpad_r_pin=board.D4, dpad_u_pin=board.D1, dpad_d_pin=board.D0, outputScale=20.0, deadbandCutoff=0.1, weight=0.2):
 		self.x_axis = PiperJoystickAxis(joy_x_pin, outputScale=outputScale, deadbandCutoff=deadbandCutoff, weight=weight)
@@ -118,6 +127,7 @@ class PiperCommandCenter:
 			self.joystick_gnd = DigitalInOut(joy_gnd_pin)
 			self.joystick_gnd.direction = Direction.OUTPUT
 			self.joystick_gnd.value = 0
+
 		# Setup DPAD
 		#
 		self.left_pin = DigitalInOut(dpad_l_pin)
@@ -130,6 +140,13 @@ class PiperCommandCenter:
 		self.right_pin.pull = Pull.UP
 		self.right = Debouncer(self.right_pin)
 		self.mouse = Mouse(usb_hid.devices)
+
+                # State
+                #
+                self.state = _UNWIRED
+                self.timer = time.monotonic()
+                self.dotstar_led = adafruit_dotstar.DotStar(board.APA102_SCK, board.APA102_MOSI, 1)
+                self.dotstar_led.brightness = 0.6
 
 	def process_repl_cmds(self):
 		# Assume that the command will be pasted, because input()
@@ -148,15 +165,30 @@ class PiperCommandCenter:
 		dx = self.x_axis.readJoystickAxis()
 		dy = self.y_axis.readJoystickAxis()
 
-		self.mouse.move(x=dx, y=dy)
+                if self.state == _UNWIRED:
+                    self.dotstar_led[0] = ((time.monotonic_ns() >> 23) % 256, 0, 0)
+                    if dx == 0 and dy == 0:
+                        self.state = _WAITING
+                        self.timer = time.monotonic()
+                elif self.state == _WAITING:
+                    self.dotstar_led[0] = ((time.monotonic_ns() >> 23) % 256, 0, 0)
+                    if dx != 0 or dy != 0:
+                        self.state = _UNWIRED
+                    else:
+                        if time.monotonic() - self.timer > 1.0:
+                            self.state = _JOYSTICK
+                elif self.state == _JOYSTICK:
+                    self.dotstar_led[0] = (0, 255, 0)
 
-		if self.left.fell:
-			self.mouse.press(Mouse.LEFT_BUTTON)
-		elif self.left.rose:
-			self.mouse.release(Mouse.LEFT_BUTTON)
+                    self.mouse.move(x=dx, y=dy)
 
-		if self.right.fell:
-			self.mouse.press(Mouse.RIGHT_BUTTON)
-		elif self.right.rose:
-			self.mouse.release(Mouse.RIGHT_BUTTON)
+                    if self.left.fell:
+                            self.mouse.press(Mouse.LEFT_BUTTON)
+                    elif self.left.rose:
+                            self.mouse.release(Mouse.LEFT_BUTTON)
+
+                    if self.right.fell:
+                            self.mouse.press(Mouse.RIGHT_BUTTON)
+                    elif self.right.rose:
+                            self.mouse.release(Mouse.RIGHT_BUTTON)
 
