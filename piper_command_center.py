@@ -68,7 +68,7 @@ import supervisor
 import time
 import usb_hid
 
-__version__ = "0.5.3"
+__version__ = "0.5.4"
 __repo__ = "https://github.com/derhexenmeister/CommandCenter.git"
 
 ################################################################################
@@ -205,7 +205,7 @@ class PiperCommandCenter:
 
                     # Initial quick and dirty mouse movement pacing
                     #
-                    if time.monotonic() - self.last_mouse > 0.01:
+                    if time.monotonic() - self.last_mouse > 0.005:
                         self.last_mouse = time.monotonic()
                         self.mouse.move(x=dx, y=dy)
 
