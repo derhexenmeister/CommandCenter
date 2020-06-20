@@ -68,7 +68,7 @@ import supervisor
 import time
 import usb_hid
 
-__version__ = "0.5.2"
+__version__ = "0.5.3"
 __repo__ = "https://github.com/derhexenmeister/CommandCenter.git"
 
 ################################################################################
@@ -156,6 +156,8 @@ class PiperCommandCenter:
                 #
                 self.state = _UNWIRED
                 self.timer = time.monotonic()
+                self.last_mouse_wheel = time.monotonic()
+                self.last_mouse = time.monotonic()
                 self.dotstar_led = adafruit_dotstar.DotStar(board.APA102_SCK, board.APA102_MOSI, 1)
                 self.dotstar_led.brightness = 0.6
 
@@ -201,8 +203,17 @@ class PiperCommandCenter:
                     elif not self.down.value:
                         dwheel=1
 
-                    self.mouse.move(x=dx, y=dy)
-                    self.mouse.move(wheel=dwheel)
+                    # Initial quick and dirty mouse movement pacing
+                    #
+                    if time.monotonic() - self.last_mouse > 0.01:
+                        self.last_mouse = time.monotonic()
+                        self.mouse.move(x=dx, y=dy)
+
+                    # Initial quick and dirty mouse scroll wheel pacing
+                    #
+                    if time.monotonic() - self.last_mouse_wheel > 0.1:
+                        self.last_mouse_wheel = time.monotonic()
+                        self.mouse.move(wheel=dwheel)
 
                     if self.left.fell:
                             self.mouse.press(Mouse.LEFT_BUTTON)
