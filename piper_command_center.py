@@ -68,7 +68,7 @@ import supervisor
 import time
 import usb_hid
 
-__version__ = "0.5.1"
+__version__ = "0.5.2"
 __repo__ = "https://github.com/derhexenmeister/CommandCenter.git"
 
 ################################################################################
@@ -139,6 +139,17 @@ class PiperCommandCenter:
 		self.right_pin.direction = Direction.INPUT
 		self.right_pin.pull = Pull.UP
 		self.right = Debouncer(self.right_pin)
+
+		self.up_pin = DigitalInOut(dpad_u_pin)
+		self.up_pin.direction = Direction.INPUT
+		self.up_pin.pull = Pull.UP
+		self.up = Debouncer(self.up_pin)
+
+		self.down_pin = DigitalInOut(dpad_d_pin)
+		self.down_pin.direction = Direction.INPUT
+		self.down_pin.pull = Pull.UP
+		self.down = Debouncer(self.down_pin)
+
 		self.mouse = Mouse(usb_hid.devices)
 
                 # State
@@ -162,6 +173,8 @@ class PiperCommandCenter:
 		# Call the debouncing library frequently
 		self.left.update()
 		self.right.update()
+		self.up.update()
+		self.down.update()
 		dx = self.x_axis.readJoystickAxis()
 		dy = self.y_axis.readJoystickAxis()
 
@@ -180,7 +193,16 @@ class PiperCommandCenter:
                 elif self.state == _JOYSTICK:
                     self.dotstar_led[0] = (0, 255, 0)
 
+                    # TODO - figure out a way to pace the mouse movements for consistency
+                    #
+                    dwheel = 0
+                    if not self.up.value:
+                        dwheel=-1
+                    elif not self.down.value:
+                        dwheel=1
+
                     self.mouse.move(x=dx, y=dy)
+                    self.mouse.move(wheel=dwheel)
 
                     if self.left.fell:
                             self.mouse.press(Mouse.LEFT_BUTTON)
