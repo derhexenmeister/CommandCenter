@@ -21,6 +21,24 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 #
+################################################################################
+#
+# Press the joystick for one second to toggle between controller modes.
+#
+# Inactive (RED LED):
+#   The joystick must remain relatively centered for one second to exit this mode. This
+#   is to prevent undesirable HID controls in the event that the joystick is not
+#   wired
+#
+# In Mouse Mode (GREEN LED):
+#   The joystick controls cursor movement.
+#   The left and right DPAD buttons mimic left and right mouse clicks.
+#   The up and down DPAD buttons mimic the mouse scroll wheel.
+#
+# In Keyboard Mode (BLUE LED):
+#   The joystick mimics the arrow keys on a keyboard
+#   The buttons mimic Space Bar (Up), Z (Left), X (Down), and C (Right) keys on a keyboard.
+#
 # *** Basic Joystick Management Usage:
 #
 # import board
@@ -59,6 +77,9 @@
 
 from adafruit_debouncer import Debouncer
 import adafruit_dotstar
+from adafruit_hid.keyboard import Keyboard
+from adafruit_hid.keyboard_layout_us import KeyboardLayoutUS
+from adafruit_hid.keycode import Keycode
 from adafruit_hid.mouse import Mouse
 from analogio import AnalogIn
 import board
@@ -68,7 +89,7 @@ import supervisor
 import time
 import usb_hid
 
-__version__ = "0.5.4"
+__version__ = "0.5.5"
 __repo__ = "https://github.com/derhexenmeister/CommandCenter.git"
 
 ################################################################################
@@ -116,11 +137,21 @@ class PiperJoystickAxis:
 _UNWIRED  = 0
 _WAITING  = 1
 _JOYSTICK = 2
+_JWAITING = 3
+_KEYBOARD = 4
+_KWAITING = 5
 
 class PiperCommandCenter:
-	def __init__(self, joy_x_pin=board.A4, joy_y_pin=board.A3, joy_gnd_pin=board.A5, dpad_l_pin=board.D3, dpad_r_pin=board.D4, dpad_u_pin=board.D1, dpad_d_pin=board.D0, outputScale=20.0, deadbandCutoff=0.1, weight=0.2):
+	def __init__(self, joy_x_pin=board.A4, joy_y_pin=board.A3, joy_z_pin=board.D2, joy_gnd_pin=board.A5, dpad_l_pin=board.D3, dpad_r_pin=board.D4, dpad_u_pin=board.D1, dpad_d_pin=board.D0, outputScale=20.0, deadbandCutoff=0.1, weight=0.2):
 		self.x_axis = PiperJoystickAxis(joy_x_pin, outputScale=outputScale, deadbandCutoff=deadbandCutoff, weight=weight)
 		self.y_axis = PiperJoystickAxis(joy_y_pin, outputScale=outputScale, deadbandCutoff=deadbandCutoff, weight=weight)
+
+		self.joy_z_pin = DigitalInOut(joy_z_pin)
+		self.joy_z_pin.direction = Direction.INPUT
+		self.joy_z_pin.pull = Pull.UP
+		self.joy_z = Debouncer(self.joy_z_pin)
+
+                # Drive pin low if requested for easier joystick wiring
 		if joy_gnd_pin is not None:
 			# Provide a ground for the joystick - this is to facilitate
 			# easier wiring
@@ -150,6 +181,8 @@ class PiperCommandCenter:
 		self.down_pin.pull = Pull.UP
 		self.down = Debouncer(self.down_pin)
 
+                self.keyboard = Keyboard(usb_hid.devices)
+                self.keyboard_layout = KeyboardLayoutUS(self.keyboard)  # Change for non-US
 		self.mouse = Mouse(usb_hid.devices)
 
                 # State
@@ -160,6 +193,10 @@ class PiperCommandCenter:
                 self.last_mouse = time.monotonic()
                 self.dotstar_led = adafruit_dotstar.DotStar(board.APA102_SCK, board.APA102_MOSI, 1)
                 self.dotstar_led.brightness = 0.6
+                self.up_pressed = False
+                self.down_pressed = False
+                self.left_pressed = False
+                self.right_pressed = False
 
 	def process_repl_cmds(self):
 		# Assume that the command will be pasted, because input()
@@ -173,6 +210,7 @@ class PiperCommandCenter:
 		self.process_repl_cmds()
 
 		# Call the debouncing library frequently
+		self.joy_z.update()
 		self.left.update()
 		self.right.update()
 		self.up.update()
@@ -180,6 +218,8 @@ class PiperCommandCenter:
 		dx = self.x_axis.readJoystickAxis()
 		dy = self.y_axis.readJoystickAxis()
 
+                # Command Center State Machine
+                #
                 if self.state == _UNWIRED:
                     self.dotstar_led[0] = ((time.monotonic_ns() >> 23) % 256, 0, 0)
                     if dx == 0 and dy == 0:
@@ -194,7 +234,45 @@ class PiperCommandCenter:
                             self.state = _JOYSTICK
                 elif self.state == _JOYSTICK:
                     self.dotstar_led[0] = (0, 255, 0)
+                    if not self.joy_z.value:
+                        self.timer = time.monotonic()
+                        self.state = _JWAITING
+                elif self.state == _JWAITING:
+                    if self.joy_z.value:
+                        self.state = _JOYSTICK
+                    else:
+                        if time.monotonic() - self.timer > 1.0:
+                            self.state = _KEYBOARD
+                            self.mouse.release(Mouse.LEFT_BUTTON)
+                            self.mouse.release(Mouse.RIGHT_BUTTON)
+                elif self.state == _KEYBOARD:
+                    self.dotstar_led[0] = (0, 0, 255)
+                    if not self.joy_z.value:
+                        self.timer = time.monotonic()
+                        self.state = _KWAITING
+                elif self.state == _KWAITING:
+                    if self.joy_z.value:
+                        self.state = _KEYBOARD
+                        self.up_pressed = False
+                        self.down_pressed = False
+                        self.left_pressed = False
+                        self.right_pressed = False
 
+                    else:
+                        if time.monotonic() - self.timer > 1.0:
+                            self.state = _JOYSTICK
+                            self.keyboard.release(Keycode.UP_ARROW)
+                            self.keyboard.release(Keycode.DOWN_ARROW)
+                            self.keyboard.release(Keycode.LEFT_ARROW)
+                            self.keyboard.release(Keycode.RIGHT_ARROW)
+                            self.keyboard.release(Keycode.SPACE)
+                            self.keyboard.release(Keycode.X)
+                            self.keyboard.release(Keycode.Z)
+                            self.keyboard.release(Keycode.C)
+
+                # Command Center Joystick Handling
+                #
+                if self.state == _JOYSTICK or self.state == _JWAITING:
                     # TODO - figure out a way to pace the mouse movements for consistency
                     #
                     dwheel = 0
@@ -224,4 +302,71 @@ class PiperCommandCenter:
                             self.mouse.press(Mouse.RIGHT_BUTTON)
                     elif self.right.rose:
                             self.mouse.release(Mouse.RIGHT_BUTTON)
+
+                # Command Center Keyboard Handling
+                #
+                if self.state == _KEYBOARD or self.state == _KWAITING:
+                    if self.up.fell:
+                        self.keyboard.press(Keycode.SPACE)
+                    elif self.up.rose:
+                        self.keyboard.release(Keycode.SPACE)
+
+                    if self.down.fell:
+                        self.keyboard.press(Keycode.X)
+                    elif self.down.rose:
+                        self.keyboard.release(Keycode.X)
+
+                    if self.left.fell:
+                        self.keyboard.press(Keycode.Z)
+                    elif self.left.rose:
+                        self.keyboard.release(Keycode.Z)
+
+                    if self.right.fell:
+                        self.keyboard.press(Keycode.C)
+                    elif self.right.rose:
+                        self.keyboard.release(Keycode.C)
+
+                    if dx == 0:
+                        if self.left_pressed:
+                            self.left_pressed = False
+                            self.keyboard.release(Keycode.LEFT_ARROW)
+                        if self.right_pressed:
+                            self.right_pressed = False
+                            self.keyboard.release(Keycode.RIGHT_ARROW)
+                    elif dx > 0:
+                        if self.left_pressed:
+                            self.left_pressed = False
+                            self.keyboard.release(Keycode.LEFT_ARROW)
+                        if not self.right_pressed:
+                            self.right_pressed = True
+                            self.keyboard.press(Keycode.RIGHT_ARROW)
+                    elif dx < 0:
+                        if not self.left_pressed:
+                            self.left_pressed = True
+                            self.keyboard.press(Keycode.LEFT_ARROW)
+                        if self.right_pressed:
+                            self.right_pressed = False
+                            self.keyboard.release(Keycode.RIGHT_ARROW)
+
+                    if dy == 0:
+                        if self.up_pressed:
+                            self.up_pressed = False
+                            self.keyboard.release(Keycode.UP_ARROW)
+                        if self.down_pressed:
+                            self.down_pressed = False
+                            self.keyboard.release(Keycode.DOWN_ARROW)
+                    elif dy < 0:
+                        if not self.up_pressed:
+                            self.up_pressed = True
+                            self.keyboard.press(Keycode.UP_ARROW)
+                        if self.down_pressed:
+                            self.down_pressed = False
+                            self.keyboard.release(Keycode.DOWN_ARROW)
+                    elif dy > 0:
+                        if self.up_pressed:
+                            self.up_pressed = False
+                            self.keyboard.release(Keycode.UP_ARROW)
+                        if not self.down_pressed:
+                            self.down_pressed = True
+                            self.keyboard.press(Keycode.DOWN_ARROW)
 
