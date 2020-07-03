@@ -230,7 +230,7 @@ class PiperCommandCenter:
                     if dx != 0 or dy != 0:
                         self.state = _UNWIRED
                     else:
-                        if time.monotonic() - self.timer > 1.0:
+                        if time.monotonic() - self.timer > 0.5:
                             self.state = _JOYSTICK
                 elif self.state == _JOYSTICK:
                     self.dotstar_led[0] = (0, 255, 0)
