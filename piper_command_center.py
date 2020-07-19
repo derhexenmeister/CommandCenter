@@ -89,7 +89,7 @@ import supervisor
 import time
 import usb_hid
 
-__version__ = "0.5.7"
+__version__ = "0.5.8"
 __repo__ = "https://github.com/derhexenmeister/CommandCenter.git"
 
 ################################################################################
@@ -127,6 +127,28 @@ class PiperJoystickAxis:
     #
     def readJoystickAxis(self):
         return int(self._cubicScaledDeadband((self.pin.value / 2**15) - 1)*self.outputScale)
+
+################################################################################
+# Joystick button handled separately
+#
+class PiperJoystickZ:
+    def __init__(self, joy_z_pin=board.D2):
+        self.joy_z_pin = DigitalInOut(joy_z_pin)
+        self.joy_z_pin.direction = Direction.INPUT
+        self.joy_z_pin.pull = Pull.UP
+        self.joy_z = Debouncer(self.joy_z_pin)
+
+    def update(self):
+        self.joy_z.update()
+
+    def zPressed(self):
+        return not self.joy_z.value
+
+    def zPressedEvent(self):
+        return self.joy_z.fell
+
+    def zReleasedEvent(self):
+        return self.joy_z.rose
 
 ################################################################################
 # This class allows a user to manage DPAD handling.
@@ -224,12 +246,8 @@ class PiperCommandCenter:
     def __init__(self, joy_x_pin=board.A4, joy_y_pin=board.A3, joy_z_pin=board.D2, joy_gnd_pin=board.A5, dpad_l_pin=board.D3, dpad_r_pin=board.D4, dpad_u_pin=board.D1, dpad_d_pin=board.D0, outputScale=20.0, deadbandCutoff=0.1, weight=0.2):
         self.x_axis = PiperJoystickAxis(joy_x_pin, outputScale=outputScale, deadbandCutoff=deadbandCutoff, weight=weight)
         self.y_axis = PiperJoystickAxis(joy_y_pin, outputScale=outputScale, deadbandCutoff=deadbandCutoff, weight=weight)
+        self.joy_z = PiperJoystickZ(joy_z_pin)
         self.dpad = PiperDpad(dpad_l_pin, dpad_r_pin, dpad_u_pin, dpad_d_pin)
-
-        self.joy_z_pin = DigitalInOut(joy_z_pin)
-        self.joy_z_pin.direction = Direction.INPUT
-        self.joy_z_pin.pull = Pull.UP
-        self.joy_z = Debouncer(self.joy_z_pin)
 
         # Drive pin low if requested for easier joystick wiring
         if joy_gnd_pin is not None:
@@ -270,6 +288,7 @@ class PiperCommandCenter:
         # Call the debouncing library frequently
         self.joy_z.update()
         self.dpad.update()
+
         dx = self.x_axis.readJoystickAxis()
         dy = self.y_axis.readJoystickAxis()
 
@@ -289,11 +308,11 @@ class PiperCommandCenter:
                     self.state = _JOYSTICK
         elif self.state == _JOYSTICK:
             self.dotstar_led[0] = (0, 255, 0)
-            if not self.joy_z.value:
+            if self.joy_z.zPressed():
                 self.timer = time.monotonic()
                 self.state = _JWAITING
         elif self.state == _JWAITING:
-            if self.joy_z.value:
+            if not self.joy_z.zPressed():
                 self.state = _JOYSTICK
             else:
                 if time.monotonic() - self.timer > 1.0:
@@ -302,11 +321,11 @@ class PiperCommandCenter:
                     self.mouse.release(Mouse.RIGHT_BUTTON)
         elif self.state == _KEYBOARD:
             self.dotstar_led[0] = (0, 0, 255)
-            if not self.joy_z.value:
+            if self.joy_z.zPressed():
                 self.timer = time.monotonic()
                 self.state = _KWAITING
         elif self.state == _KWAITING:
-            if self.joy_z.value:
+            if not self.joy_z.zPressed():
                 self.state = _KEYBOARD
                 self.up_pressed = False
                 self.down_pressed = False
