@@ -39,6 +39,10 @@
 #   The joystick mimics the arrow keys on a keyboard
 #   The buttons mimic Space Bar (Up), Z (Left), X (Down), and C (Right) keys on a keyboard.
 #
+# In Minecraft Mode (CYAN LED):
+#   Description TBD
+#   Requires 3 additional buttons to be wired to SCK, MOSI, MISO
+#
 # *** Basic Joystick Management Usage:
 #
 # import board
@@ -89,7 +93,7 @@ import supervisor
 import time
 import usb_hid
 
-__version__ = "0.5.8"
+__version__ = "0.6.0"
 __repo__ = "https://github.com/derhexenmeister/CommandCenter.git"
 
 ################################################################################
@@ -230,24 +234,131 @@ class PiperDpad:
         return self.down.rose
 
 ################################################################################
+# Minecraft button handling
+# Call update regularly to handle button debouncing
+#
+# topPressed, middlePressed, bottomPressed
+#   Indicates if the corresponding button is currently pressed
+#
+# topPressedEvent, middlePressedEvent, bottomPressedEvent
+#   Indicates if the corresponding button was just pressed
+#
+# topReleasedEvent, middleReleasedEvent, bottomReleasedEvent
+#   Indicates if the corresponding button was just released
+#
+#
+class PiperMineCraftButtons:
+    def __init__(self, mc_top_pin=board.SCK, mc_middle_pin=board.MOSI, mc_bottom_pin=board.MISO):
+        # Setup Minecraft Buttons
+        #
+        if mc_top_pin is not None:
+            self.mc_top_pin = DigitalInOut(mc_top_pin)
+            self.mc_top_pin.direction = Direction.INPUT
+            self.mc_top_pin.pull = Pull.UP
+            self.mc_top = Debouncer(self.mc_top_pin)
+        else:
+            self.mc_top = None
+
+        if mc_middle_pin is not None:
+            self.mc_middle_pin = DigitalInOut(mc_middle_pin)
+            self.mc_middle_pin.direction = Direction.INPUT
+            self.mc_middle_pin.pull = Pull.UP
+            self.mc_middle = Debouncer(self.mc_middle_pin)
+        else:
+            self.mc_middle = None
+
+        if mc_bottom_pin is not None:
+            self.mc_bottom_pin = DigitalInOut(mc_bottom_pin)
+            self.mc_bottom_pin.direction = Direction.INPUT
+            self.mc_bottom_pin.pull = Pull.UP
+            self.mc_bottom = Debouncer(self.mc_bottom_pin)
+        else:
+            self.mc_bottom = None
+
+    def update(self):
+        if self.top:
+            self.top.update()
+        if self.middle:
+            self.middle.update()
+        if self.bottom:
+            self.bottom.update()
+
+    def topPressed(self):
+        if self.top:
+            return not self.top.value
+        else:
+            return False
+
+    def topPressedEvent(self):
+        if self.top:
+            return self.top.fell
+        else:
+            return False
+
+    def topReleasedEvent(self):
+        if self.top:
+            return self.top.rose
+        else:
+            return False
+
+    def middlePressed(self):
+        if self.middle:
+            return not self.middle.value
+        else:
+            return False
+
+    def middlePressedEvent(self):
+        if self.middle:
+            return self.middle.fell
+        else:
+            return False
+
+    def middleReleasedEvent(self):
+        if self.middle:
+            return self.middle.rose
+        else:
+            return False
+
+    def bottomPressed(self):
+        if self.bottom:
+            return not self.bottom.value
+        else:
+            return False
+
+    def bottomPressedEvent(self):
+        if self.bottom:
+            return self.bottom.fell
+        else:
+            return False
+
+    def bottomReleasedEvent(self):
+        if self.bottom:
+            return self.bottom.rose
+        else:
+            return False
+
+################################################################################
 # Handle all Piper Command Center built-in functionality
 #
 
 # States
 #
-_UNWIRED  = 0
-_WAITING  = 1
-_JOYSTICK = 2
-_JWAITING = 3
-_KEYBOARD = 4
-_KWAITING = 5
+_UNWIRED   = 0
+_WAITING   = 1
+_JOYSTICK  = 2
+_JWAITING  = 3
+_KEYBOARD  = 4
+_KWAITING  = 5
+_MINECRAFT = 6
+_MWAITING  = 7
 
 class PiperCommandCenter:
-    def __init__(self, joy_x_pin=board.A4, joy_y_pin=board.A3, joy_z_pin=board.D2, joy_gnd_pin=board.A5, dpad_l_pin=board.D3, dpad_r_pin=board.D4, dpad_u_pin=board.D1, dpad_d_pin=board.D0, outputScale=20.0, deadbandCutoff=0.1, weight=0.2):
+    def __init__(self, joy_x_pin=board.A4, joy_y_pin=board.A3, joy_z_pin=board.D2, joy_gnd_pin=board.A5, dpad_l_pin=board.D3, dpad_r_pin=board.D4, dpad_u_pin=board.D1, dpad_d_pin=board.D0, mc_top_pin=board.SCK, mc_middle_pin=board.MOSI, mc_bottom_pin=board.MISO, outputScale=20.0, deadbandCutoff=0.1, weight=0.2):
         self.x_axis = PiperJoystickAxis(joy_x_pin, outputScale=outputScale, deadbandCutoff=deadbandCutoff, weight=weight)
         self.y_axis = PiperJoystickAxis(joy_y_pin, outputScale=outputScale, deadbandCutoff=deadbandCutoff, weight=weight)
         self.joy_z = PiperJoystickZ(joy_z_pin)
         self.dpad = PiperDpad(dpad_l_pin, dpad_r_pin, dpad_u_pin, dpad_d_pin)
+        self.minecraftbuttons = PiperMineCraftButtons(mc_top_pin, mc_middle_pin, mc_bottom_pin)
 
         # Drive pin low if requested for easier joystick wiring
         if joy_gnd_pin is not None:
@@ -268,7 +379,7 @@ class PiperCommandCenter:
         self.last_mouse_wheel = time.monotonic()
         self.last_mouse = time.monotonic()
         self.dotstar_led = adafruit_dotstar.DotStar(board.APA102_SCK, board.APA102_MOSI, 1)
-        self.dotstar_led.brightness = 0.6
+        self.dotstar_led.brightness = 0.2
         self.up_pressed = False
         self.down_pressed = False
         self.left_pressed = False
@@ -331,10 +442,9 @@ class PiperCommandCenter:
                 self.down_pressed = False
                 self.left_pressed = False
                 self.right_pressed = False
-
             else:
                 if time.monotonic() - self.timer > 1.0:
-                    self.state = _JOYSTICK
+                    self.state = _MINECRAFT
                     self.keyboard.release(Keycode.UP_ARROW)
                     self.keyboard.release(Keycode.DOWN_ARROW)
                     self.keyboard.release(Keycode.LEFT_ARROW)
@@ -343,6 +453,17 @@ class PiperCommandCenter:
                     self.keyboard.release(Keycode.X)
                     self.keyboard.release(Keycode.Z)
                     self.keyboard.release(Keycode.C)
+        elif self.state == _MINECRAFT:
+            self.dotstar_led[0] = (0, 255, 255)
+            if self.joy_z.zPressed():
+                self.timer = time.monotonic()
+                self.state = _MWAITING
+        elif self.state == _MWAITING:
+            if not self.joy_z.zPressed():
+                self.state = _MINECRAFT
+            else:
+                if time.monotonic() - self.timer > 1.0:
+                    self.state = _JOYSTICK
 
         # Command Center Joystick Handling
         #
