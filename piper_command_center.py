@@ -93,7 +93,7 @@ import supervisor
 import time
 import usb_hid
 
-__version__ = "0.6.0"
+__version__ = "0.6.1"
 __repo__ = "https://github.com/derhexenmeister/CommandCenter.git"
 
 ################################################################################
@@ -276,64 +276,64 @@ class PiperMineCraftButtons:
             self.mc_bottom = None
 
     def update(self):
-        if self.top:
-            self.top.update()
-        if self.middle:
-            self.middle.update()
-        if self.bottom:
-            self.bottom.update()
+        if self.mc_top:
+            self.mc_top.update()
+        if self.mc_middle:
+            self.mc_middle.update()
+        if self.mc_bottom:
+            self.mc_bottom.update()
 
     def topPressed(self):
-        if self.top:
-            return not self.top.value
+        if self.mc_top:
+            return not self.mc_top.value
         else:
             return False
 
     def topPressedEvent(self):
-        if self.top:
-            return self.top.fell
+        if self.mc_top:
+            return self.mc_top.fell
         else:
             return False
 
     def topReleasedEvent(self):
-        if self.top:
-            return self.top.rose
+        if self.mc_top:
+            return self.mc_top.rose
         else:
             return False
 
     def middlePressed(self):
-        if self.middle:
-            return not self.middle.value
+        if self.mc_middle:
+            return not self.mc_middle.value
         else:
             return False
 
     def middlePressedEvent(self):
-        if self.middle:
-            return self.middle.fell
+        if self.mc_middle:
+            return self.mc_middle.fell
         else:
             return False
 
     def middleReleasedEvent(self):
-        if self.middle:
-            return self.middle.rose
+        if self.mc_middle:
+            return self.mc_middle.rose
         else:
             return False
 
     def bottomPressed(self):
-        if self.bottom:
-            return not self.bottom.value
+        if self.mc_bottom:
+            return not self.mc_bottom.value
         else:
             return False
 
     def bottomPressedEvent(self):
-        if self.bottom:
-            return self.bottom.fell
+        if self.mc_bottom:
+            return self.mc_bottom.fell
         else:
             return False
 
     def bottomReleasedEvent(self):
-        if self.bottom:
-            return self.bottom.rose
+        if self.mc_bottom:
+            return self.mc_bottom.rose
         else:
             return False
 
@@ -399,6 +399,7 @@ class PiperCommandCenter:
         # Call the debouncing library frequently
         self.joy_z.update()
         self.dpad.update()
+        self.minecraftbuttons.update()
 
         dx = self.x_axis.readJoystickAxis()
         dy = self.y_axis.readJoystickAxis()
@@ -564,4 +565,43 @@ class PiperCommandCenter:
                 if not self.down_pressed:
                     self.down_pressed = True
                     self.keyboard.press(Keycode.DOWN_ARROW)
+
+        # Command Center Minecraft Handling
+        #
+        if self.state == _MINECRAFT:
+            # Initial quick and dirty mouse movement pacing
+            #
+            if time.monotonic() - self.last_mouse > 0.005:
+                self.last_mouse = time.monotonic()
+                self.mouse.move(x=dx, y=dy)
+
+            if self.minecraftbuttons.topPressedEvent():
+                self.mouse.press(Mouse.RIGHT_BUTTON)
+            elif self.minecraftbuttons.topReleasedEvent():
+                self.mouse.release(Mouse.RIGHT_BUTTON)
+
+            if self.minecraftbuttons.middlePressedEvent():
+                self.mouse.press(Mouse.LEFT_BUTTON)
+            elif self.minecraftbuttons.middleReleasedEvent():
+                self.mouse.release(Mouse.LEFT_BUTTON)
+
+            if self.dpad.upPressedEvent():
+                self.keyboard.press(Keycode.W)
+            elif self.dpad.upReleasedEvent():
+                self.keyboard.release(Keycode.W)
+
+            if self.dpad.downPressedEvent():
+                self.keyboard.press(Keycode.S)
+            elif self.dpad.downReleasedEvent():
+                self.keyboard.release(Keycode.S)
+
+            if self.dpad.leftPressedEvent():
+                self.keyboard.press(Keycode.A)
+            elif self.dpad.leftReleasedEvent():
+                self.keyboard.release(Keycode.A)
+
+            if self.dpad.rightPressedEvent():
+                self.keyboard.press(Keycode.D)
+            elif self.dpad.rightReleasedEvent():
+                self.keyboard.release(Keycode.D)
 
