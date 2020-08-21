@@ -93,7 +93,7 @@ import supervisor
 import time
 import usb_hid
 
-__version__ = "0.6.2"
+__version__ = "0.6.3"
 __repo__ = "https://github.com/derhexenmeister/CommandCenter.git"
 
 ################################################################################
@@ -384,6 +384,7 @@ class PiperCommandCenter:
         self.down_pressed = False
         self.left_pressed = False
         self.right_pressed = False
+        self.mc_modifier_pressed = False
 
     def process_repl_cmds(self):
         # Assume that the command will be pasted, because input()
@@ -465,7 +466,18 @@ class PiperCommandCenter:
             else:
                 if time.monotonic() - self.timer > 1.0:
                     self.state = _JOYSTICK
-
+                    self.mc_modifier_pressed = False
+                    self.mouse.release(Mouse.LEFT_BUTTON)
+                    self.mouse.release(Mouse.MIDDLE_BUTTON)
+                    self.mouse.release(Mouse.RIGHT_BUTTON)
+                    self.keyboard.release(Keycode.A)
+                    self.keyboard.release(Keycode.D)
+                    self.keyboard.release(Keycode.E)
+                    self.keyboard.release(Keycode.S)
+                    self.keyboard.release(Keycode.W)
+                    self.keyboard.release(Keycode.ESCAPE)
+                    self.keyboard.release(Keycode.LEFT_SHIFT)
+                    self.keyboard.release(Keycode.SPACE)
         # Command Center Joystick Handling
         #
         if self.state == _JOYSTICK or self.state == _JWAITING:
@@ -569,12 +581,53 @@ class PiperCommandCenter:
         # Command Center Minecraft Handling
         #
         if self.state == _MINECRAFT:
-            # Initial quick and dirty mouse movement pacing
+            # Modifier button
             #
-            if time.monotonic() - self.last_mouse > 0.005:
-                self.last_mouse = time.monotonic()
-                self.mouse.move(x=dx, y=dy)
+            if self.minecraftbuttons.bottomPressed() and not self.mc_modifier_pressed:
+                print("self.mc_modifier_pressed = True")
+                self.mc_modifier_pressed = True
+                self.keyboard.release(Keycode.W)
+            elif not self.minecraftbuttons.bottomPressed() and self.mc_modifier_pressed:
+                print("self.mc_modifier_pressed = False")
+                self.mc_modifier_pressed = False
+                self.mouse.release(Mouse.MIDDLE_BUTTON)
+                self.keyboard.release(Keycode.E)
+                self.keyboard.release(Keycode.LEFT_SHIFT)
+                self.keyboard.release(Keycode.ESCAPE)
 
+            if self.mc_modifier_pressed:
+                # Special joystick handling due to modifier
+                #
+                if dy < 0:
+                    self.mouse.press(Mouse.MIDDLE_BUTTON)
+                else:
+                    self.mouse.release(Mouse.MIDDLE_BUTTON)
+
+                if dy > 0:
+                    self.keyboard.press(Keycode.E)
+                else:
+                    self.keyboard.release(Keycode.E)
+
+                if dx:
+                    # Initial quick and dirty mouse scroll wheel pacing
+                    #
+                    if time.monotonic() - self.last_mouse_wheel > 0.1:
+                        self.last_mouse_wheel = time.monotonic()
+                        if dx > 0:
+                            self.mouse.move(wheel=-1)
+                        else:
+                            self.mouse.move(wheel=1)
+            else:
+                # Normal joystick handling
+                #
+                # Initial quick and dirty mouse movement pacing
+                #
+                if time.monotonic() - self.last_mouse > 0.005:
+                    self.last_mouse = time.monotonic()
+                    self.mouse.move(x=dx, y=dy)
+
+            # Button handling
+            #
             if self.minecraftbuttons.topPressedEvent():
                 self.mouse.press(Mouse.RIGHT_BUTTON)
             elif self.minecraftbuttons.topReleasedEvent():
@@ -586,14 +639,26 @@ class PiperCommandCenter:
                 self.mouse.release(Mouse.LEFT_BUTTON)
 
             if self.joy_z.zPressedEvent():
-                self.keyboard.press(Keycode.SPACE)
+                if self.mc_modifier_pressed:
+                    self.keyboard.press(Keycode.LEFT_SHIFT)
+                else:
+                    self.keyboard.press(Keycode.SPACE)
             elif self.joy_z.zReleasedEvent():
-                self.keyboard.release(Keycode.SPACE)
+                if self.mc_modifier_pressed:
+                    self.keyboard.release(Keycode.LEFT_SHIFT)
+                else:
+                    self.keyboard.release(Keycode.SPACE)
 
             if self.dpad.upPressedEvent():
-                self.keyboard.press(Keycode.W)
+                if self.mc_modifier_pressed:
+                    self.keyboard.press(Keycode.ESCAPE)
+                else:
+                    self.keyboard.press(Keycode.W)
             elif self.dpad.upReleasedEvent():
-                self.keyboard.release(Keycode.W)
+                if self.mc_modifier_pressed:
+                    self.keyboard.release(Keycode.ESCAPE)
+                else:
+                    self.keyboard.release(Keycode.W)
 
             if self.dpad.downPressedEvent():
                 self.keyboard.press(Keycode.S)
