@@ -93,7 +93,7 @@ import supervisor
 import time
 import usb_hid
 
-__version__ = "0.6.1"
+__version__ = "0.6.2"
 __repo__ = "https://github.com/derhexenmeister/CommandCenter.git"
 
 ################################################################################
@@ -456,11 +456,11 @@ class PiperCommandCenter:
                     self.keyboard.release(Keycode.C)
         elif self.state == _MINECRAFT:
             self.dotstar_led[0] = (0, 255, 255)
-            if self.joy_z.zPressed():
+            if self.joy_z.zPressed() and self.dpad.upPressed() and self.dpad.downPressed() and self.dpad.leftPressed() and self.dpad.rightPressed():
                 self.timer = time.monotonic()
                 self.state = _MWAITING
         elif self.state == _MWAITING:
-            if not self.joy_z.zPressed():
+            if not self.joy_z.zPressed() or not self.dpad.upPressed() or not self.dpad.downPressed() or not self.dpad.leftPressed() or not self.dpad.rightPressed():
                 self.state = _MINECRAFT
             else:
                 if time.monotonic() - self.timer > 1.0:
@@ -584,6 +584,11 @@ class PiperCommandCenter:
                 self.mouse.press(Mouse.LEFT_BUTTON)
             elif self.minecraftbuttons.middleReleasedEvent():
                 self.mouse.release(Mouse.LEFT_BUTTON)
+
+            if self.joy_z.zPressedEvent():
+                self.keyboard.press(Keycode.SPACE)
+            elif self.joy_z.zReleasedEvent():
+                self.keyboard.release(Keycode.SPACE)
 
             if self.dpad.upPressedEvent():
                 self.keyboard.press(Keycode.W)
