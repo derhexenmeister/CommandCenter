@@ -93,7 +93,7 @@ import supervisor
 import time
 import usb_hid
 
-__version__ = "0.6.3"
+__version__ = "0.7.0"
 __repo__ = "https://github.com/derhexenmeister/CommandCenter.git"
 
 ################################################################################
@@ -246,7 +246,6 @@ class PiperDpad:
 # topReleasedEvent, middleReleasedEvent, bottomReleasedEvent
 #   Indicates if the corresponding button was just released
 #
-#
 class PiperMineCraftButtons:
     def __init__(self, mc_top_pin=board.SCK, mc_middle_pin=board.MOSI, mc_bottom_pin=board.MISO):
         # Setup Minecraft Buttons
@@ -352,6 +351,18 @@ _KWAITING  = 5
 _MINECRAFT = 6
 _MWAITING  = 7
 
+# Minecraft modes
+#
+_MC_DEFAULT    = 0
+_MC_FLYINGDOWN = 1
+_MC_SPRINTING  = 2
+_MC_CROUCHING  = 3
+_MC_UTILITY    = 4
+
+# Keycodes for joystick button press
+#                 _MC_DEFAULT    _MC_FLYINGDOWN      _MC_SPRINTING  _MC_CROUCHING  _MC_UTILITY
+_MC_JOYSTICK_Z = [Keycode.SPACE, Keycode.LEFT_SHIFT, Keycode.SPACE, Keycode.SPACE, Keycode.F5]
+
 class PiperCommandCenter:
     def __init__(self, joy_x_pin=board.A4, joy_y_pin=board.A3, joy_z_pin=board.D2, joy_gnd_pin=board.A5, dpad_l_pin=board.D3, dpad_r_pin=board.D4, dpad_u_pin=board.D1, dpad_d_pin=board.D0, mc_top_pin=board.SCK, mc_middle_pin=board.MOSI, mc_bottom_pin=board.MISO, outputScale=20.0, deadbandCutoff=0.1, weight=0.2):
         self.x_axis = PiperJoystickAxis(joy_x_pin, outputScale=outputScale, deadbandCutoff=deadbandCutoff, weight=weight)
@@ -384,7 +395,11 @@ class PiperCommandCenter:
         self.down_pressed = False
         self.left_pressed = False
         self.right_pressed = False
-        self.mc_modifier_pressed = False
+        self.mc_mode = _MC_DEFAULT
+        self.mc_flyingdown_req = False
+        self.mc_sprinting_req = False
+        self.mc_crouching_req = False
+        self.mc_utility_req = False
 
     def process_repl_cmds(self):
         # Assume that the command will be pasted, because input()
@@ -393,6 +408,37 @@ class PiperCommandCenter:
         if supervisor.runtime.serial_bytes_available:
             cmd = input()
             exec(cmd)
+
+    def releaseJoystickHID(self):
+        self.mouse.release(Mouse.LEFT_BUTTON)
+        self.mouse.release(Mouse.RIGHT_BUTTON)
+
+    def releaseKeyboardHID(self):
+        self.keyboard.release(Keycode.UP_ARROW)
+        self.keyboard.release(Keycode.DOWN_ARROW)
+        self.keyboard.release(Keycode.LEFT_ARROW)
+        self.keyboard.release(Keycode.RIGHT_ARROW)
+        self.keyboard.release(Keycode.SPACE)
+        self.keyboard.release(Keycode.X)
+        self.keyboard.release(Keycode.Z)
+        self.keyboard.release(Keycode.C)
+
+    def releaseMinecraftHID(self):
+        self.mouse.release(Mouse.LEFT_BUTTON)
+        self.mouse.release(Mouse.MIDDLE_BUTTON)
+        self.mouse.release(Mouse.RIGHT_BUTTON)
+
+        self.keyboard.release(Keycode.A)
+        self.keyboard.release(Keycode.CONTROL)
+        self.keyboard.release(Keycode.D)
+        self.keyboard.release(Keycode.E)
+        self.keyboard.release(Keycode.ESCAPE)
+        self.keyboard.release(Keycode.F5)
+        self.keyboard.release(Keycode.LEFT_SHIFT)
+        self.keyboard.release(Keycode.Q)
+        self.keyboard.release(Keycode.S)
+        self.keyboard.release(Keycode.SPACE)
+        self.keyboard.release(Keycode.W)
 
     def process(self):
         self.process_repl_cmds()
@@ -430,8 +476,7 @@ class PiperCommandCenter:
             else:
                 if time.monotonic() - self.timer > 1.0:
                     self.state = _KEYBOARD
-                    self.mouse.release(Mouse.LEFT_BUTTON)
-                    self.mouse.release(Mouse.RIGHT_BUTTON)
+                    self.releaseJoystickHID()
         elif self.state == _KEYBOARD:
             self.dotstar_led[0] = (0, 0, 255)
             if self.joy_z.zPressed():
@@ -447,16 +492,19 @@ class PiperCommandCenter:
             else:
                 if time.monotonic() - self.timer > 1.0:
                     self.state = _MINECRAFT
-                    self.keyboard.release(Keycode.UP_ARROW)
-                    self.keyboard.release(Keycode.DOWN_ARROW)
-                    self.keyboard.release(Keycode.LEFT_ARROW)
-                    self.keyboard.release(Keycode.RIGHT_ARROW)
-                    self.keyboard.release(Keycode.SPACE)
-                    self.keyboard.release(Keycode.X)
-                    self.keyboard.release(Keycode.Z)
-                    self.keyboard.release(Keycode.C)
+                    self.releaseKeyboardHID()
         elif self.state == _MINECRAFT:
-            self.dotstar_led[0] = (0, 255, 255)
+            if self.mc_mode == _MC_DEFAULT :
+                self.dotstar_led[0] = (0, 255, 255) # cyan
+            elif self.mc_mode == _MC_FLYINGDOWN:
+                self.dotstar_led[0] = (255, 0, 255) # magenta
+            elif self.mc_mode == _MC_SPRINTING:
+                self.dotstar_led[0] = (255, 128, 128) # pink
+            elif self.mc_mode == _MC_CROUCHING:
+                self.dotstar_led[0] = (255, 165, 0) # orange
+            elif self.mc_mode == _MC_UTILITY:
+                self.dotstar_led[0] = (255, 255, 0) # yellow
+
             if self.joy_z.zPressed() and self.dpad.upPressed() and self.dpad.downPressed() and self.dpad.leftPressed() and self.dpad.rightPressed():
                 self.timer = time.monotonic()
                 self.state = _MWAITING
@@ -466,18 +514,8 @@ class PiperCommandCenter:
             else:
                 if time.monotonic() - self.timer > 1.0:
                     self.state = _JOYSTICK
-                    self.mc_modifier_pressed = False
-                    self.mouse.release(Mouse.LEFT_BUTTON)
-                    self.mouse.release(Mouse.MIDDLE_BUTTON)
-                    self.mouse.release(Mouse.RIGHT_BUTTON)
-                    self.keyboard.release(Keycode.A)
-                    self.keyboard.release(Keycode.D)
-                    self.keyboard.release(Keycode.E)
-                    self.keyboard.release(Keycode.S)
-                    self.keyboard.release(Keycode.W)
-                    self.keyboard.release(Keycode.ESCAPE)
-                    self.keyboard.release(Keycode.LEFT_SHIFT)
-                    self.keyboard.release(Keycode.SPACE)
+                    self.releaseMinecraftHID()
+
         # Command Center Joystick Handling
         #
         if self.state == _JOYSTICK or self.state == _JWAITING:
@@ -583,95 +621,124 @@ class PiperCommandCenter:
         if self.state == _MINECRAFT:
             # Modifier button
             #
-            if self.minecraftbuttons.bottomPressed() and not self.mc_modifier_pressed:
-                print("self.mc_modifier_pressed = True")
-                self.mc_modifier_pressed = True
-                self.keyboard.release(Keycode.W)
-            elif not self.minecraftbuttons.bottomPressed() and self.mc_modifier_pressed:
-                print("self.mc_modifier_pressed = False")
-                self.mc_modifier_pressed = False
-                self.mouse.release(Mouse.MIDDLE_BUTTON)
-                self.keyboard.release(Keycode.E)
-                self.keyboard.release(Keycode.LEFT_SHIFT)
-                self.keyboard.release(Keycode.ESCAPE)
+            if self.minecraftbuttons.bottomPressed():
+                if self.joy_z.zPressedEvent():
+                    self.mc_flyingdown_req = True
+                    self.mc_sprinting_req  = False
+                    self.mc_crouching_req  = False
+                    self.mc_utility_req    = False
+                elif self.dpad.upPressedEvent():
+                    self.mc_flyingdown_req = False
+                    self.mc_sprinting_req  = True
+                    self.mc_crouching_req  = False
+                    self.mc_utility_req    = False
+                elif self.dpad.downPressedEvent():
+                    self.mc_flyingdown_req = False
+                    self.mc_sprinting_req  = False
+                    self.mc_crouching_req  = True
+                    self.mc_utility_req    = False
+                elif self.dpad.leftPressedEvent():
+                    self.mc_flyingdown_req = False
+                    self.mc_sprinting_req  = False
+                    self.mc_crouching_req  = False
+                    self.mc_utility_req    = True
 
-            if self.mc_modifier_pressed:
-                # Special joystick handling due to modifier
-                #
-                if dy < 0:
-                    self.mouse.press(Mouse.MIDDLE_BUTTON)
-                else:
-                    self.mouse.release(Mouse.MIDDLE_BUTTON)
-
-                if dy > 0:
-                    self.keyboard.press(Keycode.E)
-                else:
-                    self.keyboard.release(Keycode.E)
-
-                if dx:
-                    # Initial quick and dirty mouse scroll wheel pacing
-                    #
-                    if time.monotonic() - self.last_mouse_wheel > 0.1:
-                        self.last_mouse_wheel = time.monotonic()
-                        if dx > 0:
-                            self.mouse.move(wheel=-1)
-                        else:
-                            self.mouse.move(wheel=1)
-            else:
-                # Normal joystick handling
-                #
-                # Initial quick and dirty mouse movement pacing
-                #
-                if time.monotonic() - self.last_mouse > 0.005:
-                    self.last_mouse = time.monotonic()
-                    self.mouse.move(x=dx, y=dy)
-
-            # Button handling
-            #
-            if self.minecraftbuttons.topPressedEvent():
-                self.mouse.press(Mouse.RIGHT_BUTTON)
-            elif self.minecraftbuttons.topReleasedEvent():
-                self.mouse.release(Mouse.RIGHT_BUTTON)
-
-            if self.minecraftbuttons.middlePressedEvent():
-                self.mouse.press(Mouse.LEFT_BUTTON)
-            elif self.minecraftbuttons.middleReleasedEvent():
-                self.mouse.release(Mouse.LEFT_BUTTON)
-
-            if self.joy_z.zPressedEvent():
-                if self.mc_modifier_pressed:
+            if self.minecraftbuttons.bottomReleasedEvent():
+                self.releaseMinecraftHID()
+                if self.mc_flyingdown_req:
+                    self.mc_mode = _MC_FLYINGDOWN
+                    self.mc_flyingdown_req = False
+                elif self.mc_sprinting_req:
+                    self.mc_mode = _MC_SPRINTING
+                    self.mc_sprinting_req = False
+                    self.keyboard.press(Keycode.CONTROL)
+                elif self.mc_crouching_req:
+                    self.mc_mode = _MC_CROUCHING
+                    self.mc_crouching_req = False
                     self.keyboard.press(Keycode.LEFT_SHIFT)
+                elif self.mc_utility_req:
+                    self.mc_mode = _MC_UTILITY
+                    self.mc_utility_req = False
                 else:
-                    self.keyboard.press(Keycode.SPACE)
-            elif self.joy_z.zReleasedEvent():
-                if self.mc_modifier_pressed:
-                    self.keyboard.release(Keycode.LEFT_SHIFT)
+                    self.mc_mode = _MC_DEFAULT
+
+            # Joystick functionality for mouse movement is always active
+            #
+            # Mouse movement is paced - may need to adjust
+            #
+            if time.monotonic() - self.last_mouse > 0.005:
+                self.last_mouse = time.monotonic()
+                self.mouse.move(x=dx, y=dy)
+
+            # Top and bottom buttons changed by mod key in default mode
+            #
+            if self.mc_mode == _MC_DEFAULT and self.minecraftbuttons.bottomPressed():
+                if self.minecraftbuttons.topPressedEvent():
+                    self.keyboard.press(Keycode.Q)
+                elif self.minecraftbuttons.topReleasedEvent():
+                    self.keyboard.release(Keycode.Q)
+
+                if self.minecraftbuttons.middlePressedEvent():
+                    self.mouse.press(Mouse.MIDDLE_BUTTON)
+                elif self.minecraftbuttons.middleReleasedEvent():
+                    self.mouse.release(Mouse.MIDDLE_BUTTON)
+            else:
+                if self.minecraftbuttons.topPressedEvent():
+                    self.mouse.press(Mouse.LEFT_BUTTON)
+                elif self.minecraftbuttons.topReleasedEvent():
+                    self.mouse.release(Mouse.LEFT_BUTTON)
+
+                if self.minecraftbuttons.middlePressedEvent():
+                    self.mouse.press(Mouse.RIGHT_BUTTON)
+                elif self.minecraftbuttons.middleReleasedEvent():
+                    self.mouse.release(Mouse.RIGHT_BUTTON)
+
+            # Don't generate key presses for buttons if modifier key is pressed
+            #
+            if not self.minecraftbuttons.bottomPressed():
+                # Joystick button changes based on minecraft mode
+                #
+                if self.joy_z.zPressedEvent():
+                    self.keyboard.press(_MC_JOYSTICK_Z[self.mc_mode])
+                elif self.joy_z.zReleasedEvent():
+                    self.keyboard.release(_MC_JOYSTICK_Z[self.mc_mode])
+
+                # DPAD buttons special in utility mode
+                #
+                if self.mc_mode == _MC_UTILITY:
+                    if self.dpad.upPressedEvent():
+                        self.mouse.move(wheel=-1)
+
+                    if self.dpad.downPressedEvent():
+                        self.mouse.move(wheel=1)
+
+                    if self.dpad.leftPressedEvent():
+                        self.keyboard.press(Keycode.E)
+                    elif self.dpad.leftReleasedEvent():
+                        self.keyboard.release(Keycode.E)
+
+                    if self.dpad.rightPressedEvent():
+                        self.keyboard.press(Keycode.ESCAPE)
+                    elif self.dpad.rightReleasedEvent():
+                        self.keyboard.release(Keycode.ESCAPE)
                 else:
-                    self.keyboard.release(Keycode.SPACE)
+                    if self.dpad.upPressedEvent():
+                        self.keyboard.press(Keycode.W)
+                    elif self.dpad.upReleasedEvent():
+                            self.keyboard.release(Keycode.W)
 
-            if self.dpad.upPressedEvent():
-                if self.mc_modifier_pressed:
-                    self.keyboard.press(Keycode.ESCAPE)
-                else:
-                    self.keyboard.press(Keycode.W)
-            elif self.dpad.upReleasedEvent():
-                if self.mc_modifier_pressed:
-                    self.keyboard.release(Keycode.ESCAPE)
-                else:
-                    self.keyboard.release(Keycode.W)
+                    if self.dpad.downPressedEvent():
+                        self.keyboard.press(Keycode.S)
+                    elif self.dpad.downReleasedEvent():
+                        self.keyboard.release(Keycode.S)
 
-            if self.dpad.downPressedEvent():
-                self.keyboard.press(Keycode.S)
-            elif self.dpad.downReleasedEvent():
-                self.keyboard.release(Keycode.S)
+                    if self.dpad.leftPressedEvent():
+                        self.keyboard.press(Keycode.A)
+                    elif self.dpad.leftReleasedEvent():
+                        self.keyboard.release(Keycode.A)
 
-            if self.dpad.leftPressedEvent():
-                self.keyboard.press(Keycode.A)
-            elif self.dpad.leftReleasedEvent():
-                self.keyboard.release(Keycode.A)
-
-            if self.dpad.rightPressedEvent():
-                self.keyboard.press(Keycode.D)
-            elif self.dpad.rightReleasedEvent():
-                self.keyboard.release(Keycode.D)
+                    if self.dpad.rightPressedEvent():
+                        self.keyboard.press(Keycode.D)
+                    elif self.dpad.rightReleasedEvent():
+                        self.keyboard.release(Keycode.D)
 
