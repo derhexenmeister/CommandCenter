@@ -47,7 +47,7 @@ import board
 from digitalio import DigitalInOut, Direction, Pull
 from math import copysign
 
-__version__ = "0.7.2"
+__version__ = "0.7.3"
 __repo__ = "https://github.com/derhexenmeister/CommandCenter.git"
 
 ################################################################################
@@ -186,107 +186,4 @@ class PiperDpad:
 
     def downReleasedEvent(self):
         return self.down.rose
-
-################################################################################
-# Minecraft button handling
-# Call update regularly to handle button debouncing
-#
-# topPressed, middlePressed, bottomPressed
-#   Indicates if the corresponding button is currently pressed
-#
-# topPressedEvent, middlePressedEvent, bottomPressedEvent
-#   Indicates if the corresponding button was just pressed
-#
-# topReleasedEvent, middleReleasedEvent, bottomReleasedEvent
-#   Indicates if the corresponding button was just released
-#
-class PiperMineCraftButtons:
-    def __init__(self, mc_top_pin=board.SCK, mc_middle_pin=board.MOSI, mc_bottom_pin=board.MISO):
-        # Setup Minecraft Buttons
-        #
-        if mc_top_pin is not None:
-            self.mc_top_pin = DigitalInOut(mc_top_pin)
-            self.mc_top_pin.direction = Direction.INPUT
-            self.mc_top_pin.pull = Pull.UP
-            self.mc_top = Debouncer(self.mc_top_pin)
-        else:
-            self.mc_top = None
-
-        if mc_middle_pin is not None:
-            self.mc_middle_pin = DigitalInOut(mc_middle_pin)
-            self.mc_middle_pin.direction = Direction.INPUT
-            self.mc_middle_pin.pull = Pull.UP
-            self.mc_middle = Debouncer(self.mc_middle_pin)
-        else:
-            self.mc_middle = None
-
-        if mc_bottom_pin is not None:
-            self.mc_bottom_pin = DigitalInOut(mc_bottom_pin)
-            self.mc_bottom_pin.direction = Direction.INPUT
-            self.mc_bottom_pin.pull = Pull.UP
-            self.mc_bottom = Debouncer(self.mc_bottom_pin)
-        else:
-            self.mc_bottom = None
-
-    def update(self):
-        if self.mc_top:
-            self.mc_top.update()
-        if self.mc_middle:
-            self.mc_middle.update()
-        if self.mc_bottom:
-            self.mc_bottom.update()
-
-    def topPressed(self):
-        if self.mc_top:
-            return not self.mc_top.value
-        else:
-            return False
-
-    def topPressedEvent(self):
-        if self.mc_top:
-            return self.mc_top.fell
-        else:
-            return False
-
-    def topReleasedEvent(self):
-        if self.mc_top:
-            return self.mc_top.rose
-        else:
-            return False
-
-    def middlePressed(self):
-        if self.mc_middle:
-            return not self.mc_middle.value
-        else:
-            return False
-
-    def middlePressedEvent(self):
-        if self.mc_middle:
-            return self.mc_middle.fell
-        else:
-            return False
-
-    def middleReleasedEvent(self):
-        if self.mc_middle:
-            return self.mc_middle.rose
-        else:
-            return False
-
-    def bottomPressed(self):
-        if self.mc_bottom:
-            return not self.mc_bottom.value
-        else:
-            return False
-
-    def bottomPressedEvent(self):
-        if self.mc_bottom:
-            return self.mc_bottom.fell
-        else:
-            return False
-
-    def bottomReleasedEvent(self):
-        if self.mc_bottom:
-            return self.mc_bottom.rose
-        else:
-            return False
 

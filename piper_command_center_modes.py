@@ -50,6 +50,9 @@
 # while True:
 #     pcc.process()
 #
+#####
+# REPL handling commented out for now
+#
 # Note that this also uses exec() to provide minimal REPL functionality. So you
 # can paste code such as the following:
 #
@@ -63,8 +66,9 @@
 #
 ################################################################################
 
-from piper_command_center import PiperJoystickAxis, PiperJoystickZ, PiperDpad, PiperMineCraftButtons
+from piper_command_center import PiperJoystickAxis, PiperJoystickZ, PiperDpad
 
+from adafruit_debouncer import Debouncer
 import adafruit_dotstar
 from adafruit_hid.keyboard import Keyboard
 from adafruit_hid.keyboard_layout_us import KeyboardLayoutUS
@@ -78,8 +82,111 @@ import supervisor
 import time
 import usb_hid
 
-__version__ = "0.1"
+__version__ = "0.2"
 __repo__ = "https://github.com/derhexenmeister/CommandCenter.git"
+
+################################################################################
+# Minecraft button handling
+# Call update regularly to handle button debouncing
+#
+# topPressed, middlePressed, bottomPressed
+#   Indicates if the corresponding button is currently pressed
+#
+# topPressedEvent, middlePressedEvent, bottomPressedEvent
+#   Indicates if the corresponding button was just pressed
+#
+# topReleasedEvent, middleReleasedEvent, bottomReleasedEvent
+#   Indicates if the corresponding button was just released
+#
+class PiperMineCraftButtons:
+    def __init__(self, mc_top_pin=board.SCK, mc_middle_pin=board.MOSI, mc_bottom_pin=board.MISO):
+        # Setup Minecraft Buttons
+        #
+        if mc_top_pin is not None:
+            self.mc_top_pin = DigitalInOut(mc_top_pin)
+            self.mc_top_pin.direction = Direction.INPUT
+            self.mc_top_pin.pull = Pull.UP
+            self.mc_top = Debouncer(self.mc_top_pin)
+        else:
+            self.mc_top = None
+
+        if mc_middle_pin is not None:
+            self.mc_middle_pin = DigitalInOut(mc_middle_pin)
+            self.mc_middle_pin.direction = Direction.INPUT
+            self.mc_middle_pin.pull = Pull.UP
+            self.mc_middle = Debouncer(self.mc_middle_pin)
+        else:
+            self.mc_middle = None
+
+        if mc_bottom_pin is not None:
+            self.mc_bottom_pin = DigitalInOut(mc_bottom_pin)
+            self.mc_bottom_pin.direction = Direction.INPUT
+            self.mc_bottom_pin.pull = Pull.UP
+            self.mc_bottom = Debouncer(self.mc_bottom_pin)
+        else:
+            self.mc_bottom = None
+
+    def update(self):
+        if self.mc_top:
+            self.mc_top.update()
+        if self.mc_middle:
+            self.mc_middle.update()
+        if self.mc_bottom:
+            self.mc_bottom.update()
+
+    def topPressed(self):
+        if self.mc_top:
+            return not self.mc_top.value
+        else:
+            return False
+
+    def topPressedEvent(self):
+        if self.mc_top:
+            return self.mc_top.fell
+        else:
+            return False
+
+    def topReleasedEvent(self):
+        if self.mc_top:
+            return self.mc_top.rose
+        else:
+            return False
+
+    def middlePressed(self):
+        if self.mc_middle:
+            return not self.mc_middle.value
+        else:
+            return False
+
+    def middlePressedEvent(self):
+        if self.mc_middle:
+            return self.mc_middle.fell
+        else:
+            return False
+
+    def middleReleasedEvent(self):
+        if self.mc_middle:
+            return self.mc_middle.rose
+        else:
+            return False
+
+    def bottomPressed(self):
+        if self.mc_bottom:
+            return not self.mc_bottom.value
+        else:
+            return False
+
+    def bottomPressedEvent(self):
+        if self.mc_bottom:
+            return self.mc_bottom.fell
+        else:
+            return False
+
+    def bottomReleasedEvent(self):
+        if self.mc_bottom:
+            return self.mc_bottom.rose
+        else:
+            return False
 
 ################################################################################
 # Handle all Piper Command Center built-in functionality
@@ -147,13 +254,13 @@ class PiperCommandCenter:
         self.mc_crouching_req = False
         self.mc_utility_req = False
 
-    def process_repl_cmds(self):
-        # Assume that the command will be pasted, because input()
-        # will block until end of line
-        #
-        if supervisor.runtime.serial_bytes_available:
-            cmd = input()
-            exec(cmd)
+#    def process_repl_cmds(self):
+#        # Assume that the command will be pasted, because input()
+#        # will block until end of line
+#        #
+#        if supervisor.runtime.serial_bytes_available:
+#            cmd = input()
+#            exec(cmd)
 
     def releaseJoystickHID(self):
         self.mouse.release(Mouse.LEFT_BUTTON)
@@ -187,7 +294,7 @@ class PiperCommandCenter:
         self.keyboard.release(Keycode.W)
 
     def process(self):
-        self.process_repl_cmds()
+        #self.process_repl_cmds()
 
         # Call the debouncing library frequently
         self.joy_z.update()
