@@ -93,7 +93,7 @@ import supervisor
 import time
 import usb_hid
 
-__version__ = "0.7.0"
+__version__ = "0.7.1"
 __repo__ = "https://github.com/derhexenmeister/CommandCenter.git"
 
 ################################################################################
@@ -342,22 +342,23 @@ class PiperMineCraftButtons:
 
 # States
 #
-_UNWIRED   = 0
-_WAITING   = 1
-_JOYSTICK  = 2
-_JWAITING  = 3
-_KEYBOARD  = 4
-_KWAITING  = 5
-_MINECRAFT = 6
-_MWAITING  = 7
+_UNWIRED        = 0
+_WAITING        = 1
+_JOYSTICK       = 2
+_JWAITING       = 3
+_KEYBOARD       = 4
+_KWAITING_TO_J  = 5
+_KWAITING_TO_MC = 6
+_MINECRAFT      = 7
+_MWAITING       = 8
 
 # Minecraft modes
 #
-_MC_DEFAULT    = 0
-_MC_FLYINGDOWN = 1
-_MC_SPRINTING  = 2
-_MC_CROUCHING  = 3
-_MC_UTILITY    = 4
+_MC_DEFAULT     = 0
+_MC_FLYINGDOWN  = 1
+_MC_SPRINTING   = 2
+_MC_CROUCHING   = 3
+_MC_UTILITY     = 4
 
 # Keycodes for joystick button press
 #                 _MC_DEFAULT    _MC_FLYINGDOWN      _MC_SPRINTING  _MC_CROUCHING  _MC_UTILITY
@@ -479,11 +480,25 @@ class PiperCommandCenter:
                     self.releaseJoystickHID()
         elif self.state == _KEYBOARD:
             self.dotstar_led[0] = (0, 0, 255)
-            if self.joy_z.zPressed():
+            if self.joy_z.zPressed() and not self.minecraftbuttons.bottomPressed():
                 self.timer = time.monotonic()
-                self.state = _KWAITING
-        elif self.state == _KWAITING:
-            if not self.joy_z.zPressed():
+                self.state = _KWAITING_TO_J
+            elif self.joy_z.zPressed() and self.minecraftbuttons.bottomPressed():
+                self.timer = time.monotonic()
+                self.state = _KWAITING_TO_MC
+        elif self.state == _KWAITING_TO_J:
+            if not self.joy_z.zPressed() or self.minecraftbuttons.bottomPressed():
+                self.state = _KEYBOARD
+                self.up_pressed = False
+                self.down_pressed = False
+                self.left_pressed = False
+                self.right_pressed = False
+            else:
+                if time.monotonic() - self.timer > 1.0:
+                    self.state = _JOYSTICK
+                    self.releaseKeyboardHID()
+        elif self.state == _KWAITING_TO_MC:
+            if not self.joy_z.zPressed() or not self.minecraftbuttons.bottomPressed():
                 self.state = _KEYBOARD
                 self.up_pressed = False
                 self.down_pressed = False
@@ -519,7 +534,7 @@ class PiperCommandCenter:
         # Command Center Joystick Handling
         #
         if self.state == _JOYSTICK or self.state == _JWAITING:
-            # TODO - figure out a way to pace the mouse movements for consistency
+            # Determine mouse wheel direction
             #
             dwheel = 0
             if self.dpad.upPressed():
@@ -551,7 +566,7 @@ class PiperCommandCenter:
 
         # Command Center Keyboard Handling
         #
-        if self.state == _KEYBOARD or self.state == _KWAITING:
+        if self.state == _KEYBOARD or self.state == _KWAITING_TO_J or self.state == _KWAITING_TO_MC:
             if self.dpad.upPressedEvent():
                 self.keyboard.press(Keycode.SPACE)
             elif self.dpad.upReleasedEvent():
