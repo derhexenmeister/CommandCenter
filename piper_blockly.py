@@ -63,7 +63,6 @@ class piperPin:
     def checkPin(self, pinPull):
         self.pin.direction = Direction.INPUT
         self.pin.pull = pinPull
-        self.debounced.update()
         pinValue = self.pin.value
         self.reportPin(str(float(pinValue)))
         return pinValue
