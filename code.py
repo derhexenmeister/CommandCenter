@@ -29,9 +29,7 @@
 from adafruit_debouncer import Debouncer
 import adafruit_dotstar
 from adafruit_hid.keyboard import Keyboard
-from adafruit_hid.keyboard import Keyboard
 from adafruit_hid.keyboard_layout_us import KeyboardLayoutUS
-from adafruit_hid.keycode import Keycode
 from adafruit_hid.keycode import Keycode
 from adafruit_hid.mouse import Mouse
 from analogio import AnalogIn
