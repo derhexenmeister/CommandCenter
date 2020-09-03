@@ -40,6 +40,8 @@ class piperPin:
     def __init__(self, pin, name):
         self.pin = DigitalInOut(pin)
         self.debounced = Debouncer(self.pin)
+        self.debouncedRising = Debouncer(self.pin)
+        self.debouncedFalling = Debouncer(self.pin)
         self.name = name
 
     # Report the pin's state for use by the digital view
@@ -83,8 +85,8 @@ class piperPin:
     def checkPinRose(self, pinPull):
         self.pin.direction = Direction.INPUT
         self.pin.pull = pinPull
-        self.debounced.update()
-        pinValue = self.debounced.rose
+        self.debouncedRising.update()
+        pinValue = self.debouncedRising.rose
         self.reportPin(str(float(pinValue))) # ???
         return pinValue
 
@@ -94,8 +96,8 @@ class piperPin:
     def checkPinFell(self, pinPull):
         self.pin.direction = Direction.INPUT
         self.pin.pull = pinPull
-        self.debounced.update()
-        pinValue = self.debounced.fell
+        self.debouncedFalling.update()
+        pinValue = self.debouncedFalling.fell
         self.reportPin(str(float(pinValue))) # ???
         return pinValue
 
